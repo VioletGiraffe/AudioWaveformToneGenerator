@@ -3,52 +3,48 @@ language: cpp
 git:
   depth: false
 
-addons:
-  sonarcloud:
-    organization: "violetgiraffe"
-    token:
-      secure: "50687be1590704fcb02527a7eba31f95db5b9518" # encrypted value of your token
-
 matrix:
   include:
     - os: osx
-      osx_image: xcode9.4
+      osx_image: xcode12u
       compiler: clang
+      addons:
+        homebrew:
+          packages:
+          - qt5
+      if: tag IS blank
     - os: linux
-      dist: xenial
+      dist: focal
       compiler: gcc
+      if: tag IS blank
       services:
         - xvfb
 
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
-  # C++17
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test; fi
-
 install:
-  # C++17
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo add-apt-repository -y ppa:beineri/opt-qt-5.12.3-xenial; fi
+  # C++2a
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo add-apt-repository -y ppa:beineri/opt-qt-5.15.0-focal; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qy update; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -qq g++-8 gcc-8; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 90; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 90; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -qq g++-10 gcc-10; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 90; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 90; fi
   # Qt5
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install qt5; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew upgrade qt5; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew link --force qt5; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export QMAKE=/usr/local/bin/qmake; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export export QTPATH=/usr/local; QMAKE=$QTPATH/bin/qmake; fi
 
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -qq qt512-meta-minimal; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -qq qt515base qt515imageformats qt515networkauth-no-lgpl qt515tools qt515x11extras; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -qq libx11-xcb-dev libglu1-mesa-dev; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export QMAKE=/opt/qt512/bin/qmake; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export PATH=/opt/qt512/bin/:$PATH; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export QMAKE=/opt/qt515/bin/qmake; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export PATH=/opt/qt515/bin/:$PATH; fi
 
 before_script:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then gcc --version; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then g++ --version; fi
 
   # linuxdeployqt
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then chmod a+x linuxdeployqt-continuous-x86_64.AppImage; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/7/linuxdeployqt-7-x86_64.AppImage"; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then chmod a+x linuxdeployqt-7-x86_64.AppImage; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH; fi
 
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then clang --version; fi
@@ -61,9 +57,4 @@ script:
   - $QMAKE -r CONFIG+=release
   # Wraps the compilation with the Build Wrapper to generate configuration (used
   # later by the SonarQube Scanner) into the "bw-output" folder
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then build-wrapper-linux-x86-64 --out-dir . make -j; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sonar-scanner; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then make -j; fi
-
-  # Linux: deploying Qt binaries
-  #- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./linuxdeployqt-continuous-x86_64.AppImage ./bin/release/x64/FileCommander -bundle-non-qt-libs; fi
+  - make -j
