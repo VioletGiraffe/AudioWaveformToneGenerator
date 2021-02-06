@@ -3,12 +3,12 @@
 ###################################################
 
 TEMPLATE = app
-TARGET   = NewAwesomeApplication
+#TARGET   = NewAwesomeApplication
 
-#QT = core gui widgets network
+QT = core gui widgets multimedia
 #win*:QT += winextras
-CONFIG -= qt
-CONFIG += console
+#CONFIG -= qt
+#CONFIG += console
 
 CONFIG += strict_c++ c++17
 
@@ -56,6 +56,8 @@ INCLUDEPATH += \
 ###################################################
 
 SOURCES += \
+	src/audio/caudiooutput.cpp \
+	src/cmainwindow.cpp \
 	src/main.cpp
 
 ###################################################
@@ -106,3 +108,10 @@ linux*|mac*|freebsd{
 win32*:!*msvc2012:*msvc* {
 	QMAKE_CXXFLAGS += /FS
 }
+
+FORMS += \
+	src/cmainwindow.ui
+
+HEADERS += \
+	src/audio/caudiooutput.h \
+	src/cmainwindow.h
