@@ -5,14 +5,6 @@ git:
 
 matrix:
   include:
-    - os: osx
-      osx_image: xcode12u
-      compiler: clang
-      addons:
-        homebrew:
-          packages:
-          - qt5
-      if: tag IS blank
     - os: linux
       dist: focal
       compiler: gcc
