@@ -1,6 +1,11 @@
 #pragma once
+#include "audio/caudiooutput.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
+RESTORE_COMPILER_WARNINGS
+
+class QAudioDeviceInfo;
 
 namespace Ui {
 class CMainWindow;
@@ -16,8 +21,12 @@ private:
 	void setupInfoTab();
 	void setupSignalTab();
 
-	void outputDeviceSelected(int deviceIndex);
+	void displayDeviceInfo(const QAudioDeviceInfo& info);
+	QAudioDeviceInfo deviceInfoById(uint devInfoId);
+	QAudioDeviceInfo selectedDeviceInfo();
 
 private:
 	Ui::CMainWindow *ui;
+
+	CAudioOutput _audio;
 };
