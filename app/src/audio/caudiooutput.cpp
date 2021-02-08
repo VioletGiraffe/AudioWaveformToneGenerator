@@ -9,12 +9,12 @@ void CAudioOutput::playTone(const uint32_t hz, const uint32_t ms, const QAudioDe
 {
 	stopPlayback();
 
-	const uint32_t nSamples = format.sampleRate() * ms / 1000;
+	const size_t nSamples = format.sampleRate() * ms / 1000;
 
 	assert_and_return_r(amplitude >= 0.0f && amplitude <= 1.0f, );
 
 	assert_r(format.sampleSize() == 32);
-	const auto nChannels = format.channelCount();
+	const auto nChannels = static_cast<size_t>(format.channelCount());
 	QByteArray& buffer = _data.buffer();
 	buffer.resize(nSamples * (format.sampleSize() / 8) * nChannels);
 
@@ -26,13 +26,13 @@ void CAudioOutput::playTone(const uint32_t hz, const uint32_t ms, const QAudioDe
 		std::byte* data = reinterpret_cast<std::byte*>(buffer.data());
 		const float sampleRateF = static_cast<float>(format.sampleRate());
 		const float omega = 2.0f * std::numbers::pi_v<float> * static_cast<float>(hz) / sampleRateF;
-		for (uint32_t i = 0; i < nSamples; ++i)
+		for (size_t i = 0; i < nSamples; ++i)
 		{
-			for (int c = 0; c < nChannels; ++c)
+			for (size_t c = 0; c < nChannels; ++c)
 			{
 				float sample = 0.0f;
 				if (c == static_cast<int>(ch))
-					sample = amplitude * std::sinf(omega * i);
+					sample = amplitude * std::sin(omega * i);
 
 				std::memcpy(data + (i * nChannels + c) * sizeof(float), &sample, sizeof(float));
 			}
