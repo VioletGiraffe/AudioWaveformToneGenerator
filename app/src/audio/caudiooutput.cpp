@@ -1,8 +1,9 @@
 #include "caudiooutput.h"
 #include "assert/advanced_assert.h"
 
+#include <cmath> // sinf
+#include <cstring> // memcpy
 #include <numbers>
-
 
 void CAudioOutput::playTone(const uint32_t hz, const uint32_t ms, const QAudioDeviceInfo& device, QAudioFormat format, const Channel ch, const float amplitude)
 {

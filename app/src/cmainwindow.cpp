@@ -29,11 +29,20 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		ui->sbToneFrequency->setMaximum(info.preferredFormat().sampleRate() / 2);
 	});
 
+	// Scan all the available audio output devices and add all the appropriate ones to the combobox.
+	for (const auto& info : QAudioDeviceInfo::availableDevices(QAudio::AudioOutput))
 	{
-		for (const auto& info : QAudioDeviceInfo::availableDevices(QAudio::AudioOutput))
+		if (const auto realm = info.realm(); realm != "default")
+			ui->cbSources->addItem(info.deviceName() + " - " + realm, deviceInfoId(info));
+	}
+
+	// Find and select the AVR if there is one.
+	for (int i = 0; i < ui->cbSources->count(); ++i)
+	{
+		if (ui->cbSources->itemText(i).contains("AVR"))
 		{
-			if (const auto realm = info.realm(); realm != "default")
-				ui->cbSources->addItem(info.deviceName() + " - " + realm, deviceInfoId(info));
+			ui->cbSources->setCurrentIndex(i);
+			break;
 		}
 	}
 
