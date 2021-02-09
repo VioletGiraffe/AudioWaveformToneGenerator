@@ -18,8 +18,7 @@ public:
 	~CMainWindow();
 
 private:
-	void setupInfoTab();
-	void setupSignalTab();
+	void newDeviceSelected();
 
 	void displayDeviceInfo(const QAudioDeviceInfo& info);
 	QAudioDeviceInfo deviceInfoById(uint devInfoId);

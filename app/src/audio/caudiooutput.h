@@ -5,23 +5,23 @@
 DISABLE_COMPILER_WARNINGS
 #include <QAudioOutput>
 #include <QBuffer>
+#include <QString>
 RESTORE_COMPILER_WARNINGS
 
 #include <memory>
+#include <vector>
 
-enum class Channel {
-	L,
-	R,
-	C,
-	SurroundL,
-	SurroundR,
-	LFE
+struct Channel final {
+	static std::vector<Channel> fromFormat(const QAudioFormat& fmt);
+
+	const QString name;
+	const int index;
 };
 
 class CAudioOutput
 {
 public:
-	void playTone(uint32_t hz, uint32_t ms, const QAudioDeviceInfo& device, QAudioFormat format, Channel ch, float amplitude = 1.0f);
+	bool playTone(uint32_t hz, uint32_t ms, const QAudioDeviceInfo& device, QAudioFormat format, int channelIndex, float amplitude = 1.0f);
 	void stopPlayback();
 
 private:

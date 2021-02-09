@@ -23,11 +23,7 @@ CMainWindow::CMainWindow(QWidget *parent) :
 {
 	ui->setupUi(this);
 
-	connect(ui->cbSources, (void (QComboBox::*)(int)) & QComboBox::currentIndexChanged, this, [this] (int) {
-		const auto info	= selectedDeviceInfo();
-		displayDeviceInfo(info);
-		ui->sbToneFrequency->setMaximum(info.preferredFormat().sampleRate() / 2);
-	});
+	connect(ui->cbSources, (void (QComboBox::*)(int)) & QComboBox::currentIndexChanged, this, &CMainWindow::newDeviceSelected);
 
 	// Scan all the available audio output devices and add all the appropriate ones to the combobox.
 	for (const auto& info : QAudioDeviceInfo::availableDevices(QAudio::AudioOutput))
@@ -46,14 +42,21 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		}
 	}
 
+	// Play
+	ui->btnPlay->setIcon(QApplication::style()->standardIcon(QStyle::SP_MediaPlay));
+	ui->btnPlay->setText({});
 	connect(ui->btnPlay, &QPushButton::clicked, this, [this] {
 		const auto deviceInfo = selectedDeviceInfo();
 		auto fmt = deviceInfo.preferredFormat();
 		assert_r(fmt.codec() == "audio/pcm");
 		//assert_and_return_r(deviceInfo.isFormatSupported(fmt), );
-		_audio.playTone(ui->sbToneFrequency->value(), 10000, deviceInfo, fmt, Channel::L);
+		assert_and_return_r(ui->cbChannel->currentIndex() >= 0, );
+		_audio.playTone(ui->sbToneFrequency->value(), 10000, deviceInfo, fmt, ui->cbChannel->currentData().toInt());
 	});
 
+	// Stop
+	ui->btnStopAudio->setIcon(QApplication::style()->standardIcon(QStyle::SP_MediaStop));
+	ui->btnStopAudio->setText({});
 	connect(ui->btnStopAudio, &QPushButton::clicked, this, [this] {
 		_audio.stopPlayback();
 	});
@@ -64,12 +67,7 @@ CMainWindow::~CMainWindow()
 	delete ui;
 }
 
-void CMainWindow::setupInfoTab()
-{
-
-}
-
-static QString sampleTypeName(QAudioFormat::SampleType st)
+static QString sampleTypeName(const QAudioFormat::SampleType st)
 {
 	switch (st)
 	{
@@ -86,7 +84,7 @@ static QString sampleTypeName(QAudioFormat::SampleType st)
 	}
 }
 
-static QString byteOrderName(QAudioFormat::Endian endian)
+static QString byteOrderName(const QAudioFormat::Endian endian)
 {
 	switch (endian)
 	{
@@ -97,6 +95,20 @@ static QString byteOrderName(QAudioFormat::Endian endian)
 	default:
 		return "invalid!";
 	}
+}
+
+void CMainWindow::newDeviceSelected()
+{
+	const auto info = selectedDeviceInfo();
+	displayDeviceInfo(info);
+
+	const auto fmt = info.preferredFormat();
+	ui->sbToneFrequency->setMaximum(fmt.sampleRate() / 2);
+
+	ui->cbChannel->clear();
+	for (auto&& ch : Channel::fromFormat(fmt))
+		ui->cbChannel->addItem(ch.name, ch.index);
+	ui->cbChannel->setCurrentIndex(0);
 }
 
 void CMainWindow::displayDeviceInfo(const QAudioDeviceInfo& info)
