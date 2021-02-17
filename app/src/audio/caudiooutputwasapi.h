@@ -2,6 +2,7 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
 #include <stdint.h>
 #include <string>
 #include <thread>
@@ -66,12 +67,31 @@ private:
 	};
 
 	struct Signal {
-		std::atomic<float> hz;
-		std::atomic<size_t> channelIndex;
+		inline std::pair<float, size_t> params() const noexcept {
+			std::lock_guard lock{ _signalParamsMutex };
+			return { _hz, _channelIndex };
+		}
+
+		inline void setFrequency(float hz) noexcept {
+			std::lock_guard lock{ _signalParamsMutex };
+			_hz = hz;
+		}
+
+		inline void setChannelIndex(size_t channelIndex) noexcept {
+			std::lock_guard lock{ _signalParamsMutex };
+			_channelIndex = channelIndex;
+		}
+
+	private:
+		mutable std::mutex _signalParamsMutex;
+
+		size_t _channelIndex = 0;
+		float _hz = 1000.0f;
 	};
 
 	std::thread _thread;
 	Signal _signal;
+
 	std::atomic_bool _bPlaybackStarted = false;
 	std::atomic_bool _bTerminateThread = false;
 

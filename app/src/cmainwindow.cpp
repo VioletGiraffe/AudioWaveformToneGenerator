@@ -31,6 +31,9 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		}
 	}
 
+	_audio.setChannelIndex(ui->cbChannel->currentData().toUInt());
+	_audio.setFrequency(static_cast<float>(ui->sbToneFrequency->value()));
+
 	ui->btnPlay->setEnabled(ui->cbSources->count() > 0);
 
 	// Handle parameter changes on the fly.
@@ -68,6 +71,8 @@ CMainWindow::~CMainWindow()
 
 void CMainWindow::newDeviceSelected()
 {
+	_audio.stopPlayback();
+
 	const auto info = selectedDeviceInfo();
 	displayDeviceInfo(info);
 

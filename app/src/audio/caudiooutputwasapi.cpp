@@ -40,10 +40,11 @@ static std::vector<ChannelInfo> channelsFromMask(const DWORD mask)
 	});
 
 	std::vector<ChannelInfo> channels;
+	size_t index = 0;
 	for (const auto& ch : channelInfo)
 	{
 		if ((mask & ch.second) != 0)
-			channels.emplace_back(ch.first, ch.second);
+			channels.emplace_back(ch.first, index++);
 	}
 
 	return channels;
@@ -71,12 +72,12 @@ void generateTone(BYTE* pData, const UINT32 nBufferFrames, const int nChannelsTo
 
 void CAudioOutputWasapi::setFrequency(float hz)
 {
-	_signal.hz = hz;
+	_signal.setFrequency(hz);
 }
 
 void CAudioOutputWasapi::setChannelIndex(size_t channelIndex)
 {
-	_signal.channelIndex = channelIndex;
+	_signal.setChannelIndex(channelIndex);
 }
 
 CAudioOutputWasapi::~CAudioOutputWasapi()
@@ -309,7 +310,10 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 	hr = pAudioRenderClient->GetBuffer(numBufferFrames, &pData);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetBuffer error: " + ErrorStringFromHRESULT(hr), );
 
-	generateTone(pData, numBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, _signal.hz, _signal.channelIndex, 0);
+	{
+		const auto [f, chIndex] = _signal.params();
+		generateTone(pData, numBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, f, chIndex, 0);
+	}
 
 	hr = pAudioRenderClient->ReleaseBuffer(numBufferFrames, 0);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
@@ -333,7 +337,8 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 		hr = pAudioRenderClient->GetBuffer(numAvailableFrames, &pData);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetBuffer error: " + ErrorStringFromHRESULT(hr), );
 
-		generateTone(pData, numAvailableFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, _signal.hz, _signal.channelIndex, _samplesPlayedSoFar);
+		const auto [f, chIndex] = _signal.params();
+		generateTone(pData, numAvailableFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, f, chIndex, _samplesPlayedSoFar);
 
 		hr = pAudioRenderClient->ReleaseBuffer(numAvailableFrames, 0);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
