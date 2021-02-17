@@ -8,11 +8,6 @@
 #include <vector>
 #include <utility>
 
-struct Signal {
-	float hz;
-	size_t channelIndex;
-};
-
 struct ChannelInfo {
 	std::string name;
 	size_t index;
@@ -31,7 +26,10 @@ class CAudioOutputWasapi final
 public:
 	~CAudioOutputWasapi();
 
-	bool playTone(Signal signal);
+	void setFrequency(float hz);
+	void setChannelIndex(size_t channelIndex);
+
+	bool playTone(std::wstring deviceId);
 	void stopPlayback();
 
 	[[nodiscard]] AudioFormat mixFormat(const std::wstring& deviceId) const noexcept;
@@ -43,7 +41,7 @@ public:
 	[[nodiscard]] std::vector<DeviceInfo> devices() const noexcept;
 
 private:
-	void playbackThread(Signal signal);
+	void playbackThread(std::wstring deviceId);
 
 private:
 	enum ChannelMask : uint32_t {
@@ -67,9 +65,15 @@ private:
 		SPEAKER_TOP_BACK_RIGHT = 0x20000
 	};
 
+	struct Signal {
+		std::atomic<float> hz;
+		std::atomic<size_t> channelIndex;
+	};
+
 	std::thread _thread;
+	Signal _signal;
 	std::atomic_bool _bPlaybackStarted = false;
 	std::atomic_bool _bTerminateThread = false;
 
-	uint32_t _samplesPlayedSoFar = 0;
+	uint64_t _samplesPlayedSoFar = 0;
 };

@@ -20,7 +20,6 @@ private:
 	void newDeviceSelected();
 
 	void displayDeviceInfo(const CAudioOutputWasapi::DeviceInfo& info);
-	CAudioOutputWasapi::DeviceInfo deviceInfoById(uint devInfoId);
 	CAudioOutputWasapi::DeviceInfo selectedDeviceInfo();
 
 private:

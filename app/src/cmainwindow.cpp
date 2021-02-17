@@ -7,13 +7,7 @@ DISABLE_COMPILER_WARNINGS
 #include "ui_cmainwindow.h"
 
 #include <QDebug>
-#include <QHash>
 RESTORE_COMPILER_WARNINGS
-
-static uint deviceInfoId(const CAudioOutputWasapi::DeviceInfo& info)
-{
-	return ::qHash(QString::fromStdWString(info.id));
-}
 
 CMainWindow::CMainWindow(QWidget *parent) :
 	QMainWindow(parent),
@@ -25,7 +19,7 @@ CMainWindow::CMainWindow(QWidget *parent) :
 
 	// Scan all the available audio output devices and add all the appropriate ones to the combobox.
 	for (const auto& info : _audio.devices())
-		ui->cbSources->addItem(QString::fromStdWString(info.friendlyName), deviceInfoId(info));
+		ui->cbSources->addItem(QString::fromStdWString(info.friendlyName), QString::fromStdWString(info.id));
 
 	// Find and select the AVR if there is one.
 	for (int i = 0; i < ui->cbSources->count(); ++i)
@@ -37,6 +31,17 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		}
 	}
 
+	ui->btnPlay->setEnabled(ui->cbSources->count() > 0);
+
+	// Handle parameter changes on the fly.
+	connect(ui->cbChannel, (void (QComboBox::*)(int)) & QComboBox::currentIndexChanged, this, [this]() {
+		_audio.setChannelIndex(ui->cbChannel->currentData().toUInt());
+	});
+
+	connect(ui->sbToneFrequency, (void (QSpinBox::*)(int))&QSpinBox::valueChanged, this, [this](int value) {
+		_audio.setFrequency(static_cast<float>(value));
+	});
+
 	// Play
 	ui->btnPlay->setIcon(QApplication::style()->standardIcon(QStyle::SP_MediaPlay));
 	ui->btnPlay->setText({});
@@ -45,7 +50,7 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		auto fmt = _audio.mixFormat(deviceInfo.id);
 		assert_r(fmt.sampleFormat == AudioFormat::Float);
 		assert_and_return_r(ui->cbChannel->currentIndex() >= 0, );
-		_audio.playTone(Signal{ static_cast<float>(ui->sbToneFrequency->value()), ui->cbChannel->currentData().toUInt()});
+		_audio.playTone(ui->cbSources->currentData().toString().toStdWString());
 	});
 
 	// Stop
@@ -87,18 +92,18 @@ void CMainWindow::displayDeviceInfo(const CAudioOutputWasapi::DeviceInfo& info)
 	ui->infoText->setPlainText(infoText);
 }
 
-CAudioOutputWasapi::DeviceInfo CMainWindow::deviceInfoById(uint devInfoId)
+
+CAudioOutputWasapi::DeviceInfo CMainWindow::selectedDeviceInfo()
 {
+	if (ui->cbSources->currentIndex() < 0)
+		return {};
+
+	const auto selectedId = ui->cbSources->currentData().toString().toStdWString();
 	for (auto&& deviceInfo : _audio.devices())
 	{
-		if (deviceInfoId(deviceInfo) == devInfoId)
+		if (deviceInfo.id == selectedId)
 			return deviceInfo;
 	}
 
 	return {};
-}
-
-CAudioOutputWasapi::DeviceInfo CMainWindow::selectedDeviceInfo()
-{
-	return ui->cbSources->currentIndex() != -1 ? deviceInfoById(ui->cbSources->currentData().toUInt()) : CAudioOutputWasapi::DeviceInfo{};
 }

@@ -49,21 +49,34 @@ static std::vector<ChannelInfo> channelsFromMask(const DWORD mask)
 	return channels;
 }
 
-void generateTone(BYTE* pData, const UINT32 nBufferFrames, const int nChannelsTotal, const int sampleRate, float hz, const size_t channelIndex)
+void generateTone(BYTE* pData, const UINT32 nBufferFrames, const int nChannelsTotal, const int sampleRate, float hz, const size_t channelIndex, const uint64_t samplesPlayedSoFar)
 {
 	const float sampleRateF = static_cast<float>(sampleRate);
-	const float omega = 2.0f * std::numbers::pi_v<float> *static_cast<float>(hz) / sampleRateF;
-	for (size_t i = 0; i < nBufferFrames; ++i)
+	// s = A * sin(2 * Pi * f * t) = A * sin(Omega * t)
+	// Omega = 2 * Pi * f
+	// t = sampleIndex / samplesPerSecond
+	const float omega = 2.0f * std::numbers::pi_v<float> * hz / sampleRateF;
+	for (uint64_t i = 0; i < nBufferFrames; ++i)
 	{
 		for (size_t c = 0; c < nChannelsTotal; ++c)
 		{
 			float sample = 0;
 			if (c == channelIndex)
-				sample = 1.0f * std::sin(omega * i);
+				sample = 1.0f * std::sin(omega * (i + samplesPlayedSoFar));
 
 			std::memcpy(pData + (i * nChannelsTotal + c) * sizeof(sample), &sample, sizeof(sample));
 		}
 	}
+}
+
+void CAudioOutputWasapi::setFrequency(float hz)
+{
+	_signal.hz = hz;
+}
+
+void CAudioOutputWasapi::setChannelIndex(size_t channelIndex)
+{
+	_signal.channelIndex = channelIndex;
 }
 
 CAudioOutputWasapi::~CAudioOutputWasapi()
@@ -71,16 +84,16 @@ CAudioOutputWasapi::~CAudioOutputWasapi()
 	stopPlayback();
 }
 
-bool CAudioOutputWasapi::playTone(Signal signal)
+bool CAudioOutputWasapi::playTone(std::wstring deviceId)
 {
-	stopPlayback();
+	if (_bPlaybackStarted)
+		return true;
 
 	_bPlaybackStarted = true;
 	_bTerminateThread = false;
 
-	_thread = std::thread(&CAudioOutputWasapi::playbackThread, this, std::move(signal));
-
-	return false;
+	_thread = std::thread(&CAudioOutputWasapi::playbackThread, this, std::move(deviceId));
+	return true;
 }
 
 void CAudioOutputWasapi::stopPlayback()
@@ -205,7 +218,7 @@ std::vector<CAudioOutputWasapi::DeviceInfo> CAudioOutputWasapi::devices() const 
 	return devices;
 }
 
-void CAudioOutputWasapi::playbackThread(const Signal signal)
+void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 {
 	_samplesPlayedSoFar = 0;
 
@@ -220,12 +233,29 @@ void CAudioOutputWasapi::playbackThread(const Signal signal)
 		(void**)&pDeviceEnumerator);
 	assert_and_return_message_r(SUCCEEDED(hr), "CoCreateInstance failed: " + ErrorStringFromHRESULT(hr), );
 
-	com_ptr_nothrow<IMMDevice> pDevice;
-	hr = pDeviceEnumerator->GetDefaultAudioEndpoint(
+	com_ptr_nothrow<IMMDeviceCollection> pDevices;
+	hr = pDeviceEnumerator->EnumAudioEndpoints(
 		eRender,
-		eConsole,
-		&pDevice);
-	assert_and_return_message_r(SUCCEEDED(hr), "IMMDeviceEnumerator.GetDefaultAudioEndpoint error: " + ErrorStringFromHRESULT(hr), );
+		DEVICE_STATE_ACTIVE,
+		&pDevices);
+	assert_and_return_message_r(SUCCEEDED(hr), "IMMDeviceEnumerator.EnumAudioEndpoints error: " + ErrorStringFromHRESULT(hr), );
+
+	UINT n = 0;
+	pDevices->GetCount(&n);
+	com_ptr_nothrow<IMMDevice> pDevice;
+	for (UINT i = 0; i < n; ++i)
+	{
+		pDevices->Item(i, &pDevice);
+		if (!pDevice)
+			continue;
+
+		unique_cotaskmem_string id;
+		pDevice->GetId(&id);
+		if (deviceId == id.get())
+			break;
+		else
+			pDevice.reset();
+	}
 
 	com_ptr_nothrow<IAudioClient> pAudioClient;
 	hr = pDevice->Activate(
@@ -244,7 +274,7 @@ void CAudioOutputWasapi::playbackThread(const Signal signal)
 	assert_and_return_message_r(SUCCEEDED(hr) && pMixFormat, "IAudioClient.GetMixFormat error: " + ErrorStringFromHRESULT(hr), );
 
 	WAVEFORMATEXTENSIBLE* pFormatEx = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(pMixFormat.get());
-	assert_r(pMixFormat->wFormatTag == WAVE_FORMAT_EXTENSIBLE, {});
+	assert_r(pMixFormat->wFormatTag == WAVE_FORMAT_EXTENSIBLE);
 	assert_r(pFormatEx->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
 
 	hr = pAudioClient->Initialize(
@@ -264,10 +294,10 @@ void CAudioOutputWasapi::playbackThread(const Signal signal)
 	hr = pAudioClient->SetEventHandle(hEvent.get());
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.SetEventHandle error: " + ErrorStringFromHRESULT(hr), );
 
-	UINT32 NumBufferFrames = 0;
-	hr = pAudioClient->GetBufferSize(&NumBufferFrames);
+	UINT32 numBufferFrames = 0;
+	hr = pAudioClient->GetBufferSize(&numBufferFrames);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetBufferSize error: " + ErrorStringFromHRESULT(hr), );
-	std::cout << "buffer frame size=" << NumBufferFrames << "[frames]" << std::endl;
+	std::cout << "buffer frame size=" << numBufferFrames << "[frames]" << std::endl;
 
 	com_ptr_nothrow<IAudioRenderClient> pAudioRenderClient;
 	hr = pAudioClient->GetService(
@@ -276,36 +306,38 @@ void CAudioOutputWasapi::playbackThread(const Signal signal)
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetService error: " + ErrorStringFromHRESULT(hr), );
 
 	BYTE* pData = nullptr;
-	hr = pAudioRenderClient->GetBuffer(NumBufferFrames, &pData);
+	hr = pAudioRenderClient->GetBuffer(numBufferFrames, &pData);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetBuffer error: " + ErrorStringFromHRESULT(hr), );
 
-	generateTone(pData, NumBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, signal.hz, signal.channelIndex);
+	generateTone(pData, numBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, _signal.hz, _signal.channelIndex, 0);
 
-	hr = pAudioRenderClient->ReleaseBuffer(NumBufferFrames, 0);
+	hr = pAudioRenderClient->ReleaseBuffer(numBufferFrames, 0);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
+	_samplesPlayedSoFar += numBufferFrames;
 
 	hr = pAudioClient->Start();
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.Start error: " + ErrorStringFromHRESULT(hr), );
 
-	UINT32 NumPaddingFrames = 0;
+	UINT32 numPaddingFrames = 0;
 	while (!_bTerminateThread)
 	{
 		::WaitForSingleObject(hEvent.get(), INFINITE);
 
-		hr = pAudioClient->GetCurrentPadding(&NumPaddingFrames);
+		hr = pAudioClient->GetCurrentPadding(&numPaddingFrames);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetCurrentPadding error: " + ErrorStringFromHRESULT(hr), );
 
-		UINT32 numAvailableFrames = NumBufferFrames - NumPaddingFrames;
+		UINT32 numAvailableFrames = numBufferFrames - numPaddingFrames;
 		if (numAvailableFrames == 0)
 			continue;
 
 		hr = pAudioRenderClient->GetBuffer(numAvailableFrames, &pData);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.GetBuffer error: " + ErrorStringFromHRESULT(hr), );
 
-		generateTone(pData, NumBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, signal.hz, signal.channelIndex);
+		generateTone(pData, numAvailableFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, _signal.hz, _signal.channelIndex, _samplesPlayedSoFar);
 
 		hr = pAudioRenderClient->ReleaseBuffer(numAvailableFrames, 0);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
+		_samplesPlayedSoFar += numAvailableFrames;
 	}
 
 	//// Let the current buffer play to the end
