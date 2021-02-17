@@ -1,11 +1,10 @@
 #pragma once
-#include "audio/caudiooutput.h"
+#include "audio/caudiooutputwasapi.h"
+#include "compiler/compiler_warnings_control.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
 RESTORE_COMPILER_WARNINGS
-
-class QAudioDeviceInfo;
 
 namespace Ui {
 class CMainWindow;
@@ -20,12 +19,12 @@ public:
 private:
 	void newDeviceSelected();
 
-	void displayDeviceInfo(const QAudioDeviceInfo& info);
-	QAudioDeviceInfo deviceInfoById(uint devInfoId);
-	QAudioDeviceInfo selectedDeviceInfo();
+	void displayDeviceInfo(const CAudioOutputWasapi::DeviceInfo& info);
+	CAudioOutputWasapi::DeviceInfo deviceInfoById(uint devInfoId);
+	CAudioOutputWasapi::DeviceInfo selectedDeviceInfo();
 
 private:
 	Ui::CMainWindow *ui;
 
-	CAudioOutput _audio;
+	CAudioOutputWasapi _audio;
 };

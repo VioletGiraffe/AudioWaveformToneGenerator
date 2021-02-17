@@ -6,15 +6,13 @@
 DISABLE_COMPILER_WARNINGS
 #include "ui_cmainwindow.h"
 
-#include <QAudioDeviceInfo>
-#include <QAudioOutput>
 #include <QDebug>
 #include <QHash>
 RESTORE_COMPILER_WARNINGS
 
-static uint deviceInfoId(const QAudioDeviceInfo& info)
+static uint deviceInfoId(const CAudioOutputWasapi::DeviceInfo& info)
 {
-	return qHash(info.deviceName()) ^ qHash(info.realm());
+	return ::qHash(QString::fromStdWString(info.id));
 }
 
 CMainWindow::CMainWindow(QWidget *parent) :
@@ -26,11 +24,8 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	connect(ui->cbSources, (void (QComboBox::*)(int)) & QComboBox::currentIndexChanged, this, &CMainWindow::newDeviceSelected);
 
 	// Scan all the available audio output devices and add all the appropriate ones to the combobox.
-	for (const auto& info : QAudioDeviceInfo::availableDevices(QAudio::AudioOutput))
-	{
-		if (const auto realm = info.realm(); realm != "default")
-			ui->cbSources->addItem(info.deviceName() + " - " + realm, deviceInfoId(info));
-	}
+	for (const auto& info : _audio.devices())
+		ui->cbSources->addItem(QString::fromStdWString(info.friendlyName), deviceInfoId(info));
 
 	// Find and select the AVR if there is one.
 	for (int i = 0; i < ui->cbSources->count(); ++i)
@@ -47,11 +42,10 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	ui->btnPlay->setText({});
 	connect(ui->btnPlay, &QPushButton::clicked, this, [this] {
 		const auto deviceInfo = selectedDeviceInfo();
-		auto fmt = deviceInfo.preferredFormat();
-		assert_r(fmt.codec() == "audio/pcm");
-		//assert_and_return_r(deviceInfo.isFormatSupported(fmt), );
+		auto fmt = _audio.mixFormat(deviceInfo.id);
+		assert_r(fmt.sampleFormat == AudioFormat::Float);
 		assert_and_return_r(ui->cbChannel->currentIndex() >= 0, );
-		_audio.playTone(ui->sbToneFrequency->value(), 10000, deviceInfo, fmt, ui->cbChannel->currentData().toInt());
+		_audio.playTone(Signal{ static_cast<float>(ui->sbToneFrequency->value()), ui->cbChannel->currentData().toUInt()});
 	});
 
 	// Stop
@@ -67,96 +61,35 @@ CMainWindow::~CMainWindow()
 	delete ui;
 }
 
-static QString sampleTypeName(const QAudioFormat::SampleType st)
-{
-	switch (st)
-	{
-	case QAudioFormat::SignedInt:
-		return "signed int";
-	case QAudioFormat::UnSignedInt:
-		return "unsigned int";
-	case QAudioFormat::Float:
-		return "float";
-	case QAudioFormat::Unknown:
-		return "unknown";
-	default:
-		return "invalid!";
-	}
-}
-
-static QString byteOrderName(const QAudioFormat::Endian endian)
-{
-	switch (endian)
-	{
-	case QAudioFormat::BigEndian:
-		return "big endian";
-	case QAudioFormat::LittleEndian:
-		return "little endian";
-	default:
-		return "invalid!";
-	}
-}
-
 void CMainWindow::newDeviceSelected()
 {
 	const auto info = selectedDeviceInfo();
 	displayDeviceInfo(info);
 
-	const auto fmt = info.preferredFormat();
-	ui->sbToneFrequency->setMaximum(fmt.sampleRate() / 2);
+	const auto fmt = _audio.mixFormat(info.id);
+	ui->sbToneFrequency->setMaximum(fmt.sampleRate / 2);
 
 	ui->cbChannel->clear();
-	for (auto&& ch : Channel::fromFormat(fmt))
-		ui->cbChannel->addItem(ch.name, ch.index);
+	for (const auto& ch: fmt.channels)
+		ui->cbChannel->addItem(QString::fromStdString(ch.name), ch.index);
 	ui->cbChannel->setCurrentIndex(0);
 }
 
-void CMainWindow::displayDeviceInfo(const QAudioDeviceInfo& info)
+void CMainWindow::displayDeviceInfo(const CAudioOutputWasapi::DeviceInfo& info)
 {
-	if (info.isNull())
-	{
-		ui->infoText->clear();
-		return;
-	}
+	const auto fmt = _audio.mixFormat(info.id);
 
-	QString infoText = "Byte orders:\n";
-	for (const auto value : info.supportedByteOrders())
-		infoText += '\t' + byteOrderName(value) + '\n';
-
-	infoText += "Channel counts:\n";
-	for (const auto value : info.supportedChannelCounts())
-		infoText += '\t' + QString::number(value) + '\n';
-
-	infoText += "Sample rates:\n";
-	for (const auto value : info.supportedSampleRates())
-		infoText += '\t' + QString::number(value) + '\n';
-
-	infoText += "Sample sizes:\n";
-	for (const auto value : info.supportedSampleSizes())
-		infoText += '\t' + QString::number(value) + '\n';
-
-	infoText += "Sample types:\n";
-	for (const auto value : info.supportedSampleTypes())
-		infoText += '\t' + sampleTypeName(value) + '\n';
-
-	infoText += "Codecs:\n";
-	for (const auto& value : info.supportedCodecs())
-		infoText += '\t' + value + '\n';
-
-	infoText = infoText + "Preferred format: "
-		+ byteOrderName(info.preferredFormat().byteOrder()) + '\t'
-		+ QString::number(info.preferredFormat().channelCount()) + '\t'
-		+ QString::number(info.preferredFormat().sampleRate()) + '\t'
-		+ QString::number(info.preferredFormat().sampleSize()) + '\t'
-		+ sampleTypeName(info.preferredFormat().sampleType()) + '\t'
-		+ info.preferredFormat().codec();
+	QString infoText = "Channel count: " + QString::number(fmt.channels.size()) + '\n';
+	infoText += "Sample rate: " + QString::number(fmt.sampleRate) + '\n';
+	infoText += "Sample size: " + QString::number(fmt.bitsPerSample) + '\n';
+	infoText += "Sample type: " + QString{fmt.sampleFormat == AudioFormat::PCM ? "PCM" : "float"} + '\n';
 
 	ui->infoText->setPlainText(infoText);
 }
 
-QAudioDeviceInfo CMainWindow::deviceInfoById(uint devInfoId)
+CAudioOutputWasapi::DeviceInfo CMainWindow::deviceInfoById(uint devInfoId)
 {
-	for (auto&& deviceInfo : QAudioDeviceInfo::availableDevices(QAudio::AudioOutput))
+	for (auto&& deviceInfo : _audio.devices())
 	{
 		if (deviceInfoId(deviceInfo) == devInfoId)
 			return deviceInfo;
@@ -165,7 +98,7 @@ QAudioDeviceInfo CMainWindow::deviceInfoById(uint devInfoId)
 	return {};
 }
 
-QAudioDeviceInfo CMainWindow::selectedDeviceInfo()
+CAudioOutputWasapi::DeviceInfo CMainWindow::selectedDeviceInfo()
 {
-	return ui->cbSources->currentIndex() != -1 ? deviceInfoById(ui->cbSources->currentData().toUInt()) : QAudioDeviceInfo{};
+	return ui->cbSources->currentIndex() != -1 ? deviceInfoById(ui->cbSources->currentData().toUInt()) : CAudioOutputWasapi::DeviceInfo{};
 }
