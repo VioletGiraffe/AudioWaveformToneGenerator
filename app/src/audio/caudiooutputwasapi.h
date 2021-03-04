@@ -1,4 +1,7 @@
 #pragma once
+#include "assert/advanced_assert.h"
+#include "container/vector2d.hpp"
+#include "utility/memory_cast.hpp"
 
 #include <array>
 #include <atomic>
@@ -6,7 +9,6 @@
 #include <stdint.h>
 #include <string>
 #include <thread>
-#include <vector>
 #include <utility>
 
 struct ChannelInfo {
@@ -20,6 +22,36 @@ struct AudioFormat {
 	uint32_t sampleRate = 0;
 	enum {PCM, Float} sampleFormat;
 	uint16_t bitsPerSample = 0;
+};
+
+template <typename T>
+struct AudioSamplesBuffer {
+	void setData(const void* dataPtr, const size_t sizeBytes, const size_t nChannels) {
+		assert_and_return_r(sizeBytes % (sizeof(T) * nChannels) == 0, );
+		
+		std::lock_guard lock{ _mtx };
+
+		const auto frameSize = nChannels * sizeof(T);
+		const auto numFrames = sizeBytes / frameSize;
+		_buffer.resize(nChannels, numFrames);
+
+		for (size_t i = 0; i < numFrames; ++i)
+		{
+			for (size_t c = 0; c < nChannels; ++c)
+			{
+				_buffer[c][i] = memory_cast<float>(reinterpret_cast<const char*>(dataPtr) + i * frameSize + c);
+			}
+		}
+	}
+
+	[[nodiscard]] vector2D<T> samples() const {
+		std::lock_guard lock{ _mtx };
+		return _buffer;
+	}
+
+private:
+	mutable std::mutex _mtx;
+	vector2D<T> _buffer;
 };
 
 class CAudioOutputWasapi final
@@ -39,7 +71,9 @@ public:
 		const std::wstring id;
 		const std::wstring friendlyName;
 	};
-	[[nodiscard]] std::vector<DeviceInfo> devices() const noexcept;
+	[[nodiscard]] std::vector<DeviceInfo> devices() const;
+
+	[[nodiscard]] vector2D<float> currentSamplesBuffer() const;
 
 private:
 	void playbackThread(std::wstring deviceId);
@@ -96,4 +130,6 @@ private:
 	std::atomic_bool _bTerminateThread = false;
 
 	uint64_t _samplesPlayedSoFar = 0;
+
+	AudioSamplesBuffer<float> _currentSamplesBuffer;
 };

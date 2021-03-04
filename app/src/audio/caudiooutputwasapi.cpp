@@ -1,6 +1,5 @@
 #include "caudiooutputwasapi.h"
 
-#include "assert/advanced_assert.h"
 #include "math/math.hpp"
 #include "system/win_utils.hpp"
 
@@ -174,7 +173,7 @@ AudioFormat CAudioOutputWasapi::mixFormat(const std::wstring& deviceId) const no
 	return fmt;
 }
 
-std::vector<CAudioOutputWasapi::DeviceInfo> CAudioOutputWasapi::devices() const noexcept
+std::vector<CAudioOutputWasapi::DeviceInfo> CAudioOutputWasapi::devices() const
 {
 	com_ptr_nothrow<IMMDeviceEnumerator> pDeviceEnumerator;
 	HRESULT hr = ::CoCreateInstance(
@@ -217,6 +216,11 @@ std::vector<CAudioOutputWasapi::DeviceInfo> CAudioOutputWasapi::devices() const 
 	}
 
 	return devices;
+}
+
+vector2D<float> CAudioOutputWasapi::currentSamplesBuffer() const
+{
+	return _currentSamplesBuffer.samples();
 }
 
 void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
@@ -315,6 +319,9 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 		generateTone(pData, numBufferFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, f, chIndex, 0);
 	}
 
+	const auto bytesPerSample = pMixFormat->wBitsPerSample / 8;
+	_currentSamplesBuffer.setData(pData, numBufferFrames * bytesPerSample, pMixFormat->nChannels);
+
 	hr = pAudioRenderClient->ReleaseBuffer(numBufferFrames, 0);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
 	_samplesPlayedSoFar += numBufferFrames;
@@ -339,6 +346,7 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 
 		const auto [f, chIndex] = _signal.params();
 		generateTone(pData, numAvailableFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, f, chIndex, _samplesPlayedSoFar);
+		_currentSamplesBuffer.setData(pData, numAvailableFrames * bytesPerSample, pMixFormat->nChannels);
 
 		hr = pAudioRenderClient->ReleaseBuffer(numAvailableFrames, 0);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );

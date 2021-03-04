@@ -7,6 +7,7 @@ DISABLE_COMPILER_WARNINGS
 #include "ui_cmainwindow.h"
 
 #include <QDebug>
+#include <QLineSeries>
 RESTORE_COMPILER_WARNINGS
 
 CMainWindow::CMainWindow(QWidget *parent) :
@@ -48,25 +49,62 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	// Play
 	ui->btnPlay->setIcon(QApplication::style()->standardIcon(QStyle::SP_MediaPlay));
 	ui->btnPlay->setText({});
-	connect(ui->btnPlay, &QPushButton::clicked, this, [this] {
-		const auto deviceInfo = selectedDeviceInfo();
-		auto fmt = _audio.mixFormat(deviceInfo.id);
-		assert_r(fmt.sampleFormat == AudioFormat::Float);
-		assert_and_return_r(ui->cbChannel->currentIndex() >= 0, );
-		_audio.playTone(ui->cbSources->currentData().toString().toStdWString());
-	});
+	connect(ui->btnPlay, &QPushButton::clicked, this, &CMainWindow::play);
 
 	// Stop
 	ui->btnStopAudio->setIcon(QApplication::style()->standardIcon(QStyle::SP_MediaStop));
 	ui->btnStopAudio->setText({});
-	connect(ui->btnStopAudio, &QPushButton::clicked, this, [this] {
-		_audio.stopPlayback();
-	});
+	connect(ui->btnStopAudio, &QPushButton::clicked, this, &CMainWindow::stopPlayback);
+
+	setupChart();
 }
 
 CMainWindow::~CMainWindow()
 {
 	delete ui;
+}
+
+void CMainWindow::setupChart()
+{
+	_chart.legend()->hide();
+	//_chart.setTitle("Simple line chart example");
+
+	ui->chartWidget->setChart(&_chart);
+	ui->chartWidget->setRenderHint(QPainter::Antialiasing);
+
+	connect(&_chartUpdateTimer, &QTimer::timeout, this, [this] {
+		ui->chartWidget->setUpdatesEnabled(false);
+		if (auto oldSeries = _chart.series(); !oldSeries.empty())
+		{
+			for (auto* s : oldSeries)
+				s->deleteLater();
+
+			_chart.removeAllSeries();
+		}
+
+		const auto samples = _audio.currentSamplesBuffer();
+
+		const auto nChannels = samples.height();
+		std::vector<QLineSeries*> seriesForChannel;
+		seriesForChannel.reserve(nChannels);
+		for (size_t c = 0; c < nChannels; ++c)
+		{
+			auto* series = new QLineSeries;
+			//seriesForChannel.emplace_back(series);
+
+			for (size_t i = 0, n = samples.width(); i < n; ++i)
+			{
+				series->append(static_cast<qreal>(i), samples[c][i]);
+			}
+
+			_chart.addSeries(series);
+		}
+
+		_chart.createDefaultAxes();
+		_chart.axisY()->setRange(-1.0, +1.0);
+		_chart.axisX()->setRange(0, samples.width());
+		ui->chartWidget->setUpdatesEnabled(true);
+	});
 }
 
 void CMainWindow::newDeviceSelected()
@@ -111,4 +149,21 @@ CAudioOutputWasapi::DeviceInfo CMainWindow::selectedDeviceInfo()
 	}
 
 	return {};
+}
+
+void CMainWindow::play()
+{
+	const auto deviceInfo = selectedDeviceInfo();
+	auto fmt = _audio.mixFormat(deviceInfo.id);
+	assert_r(fmt.sampleFormat == AudioFormat::Float);
+	assert_and_return_r(ui->cbChannel->currentIndex() >= 0, );
+	_audio.playTone(ui->cbSources->currentData().toString().toStdWString());
+
+	_chartUpdateTimer.start(100);
+}
+
+void CMainWindow::stopPlayback()
+{
+	_chartUpdateTimer.stop();
+	_audio.stopPlayback();
 }

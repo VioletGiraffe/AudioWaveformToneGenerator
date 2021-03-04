@@ -5,7 +5,7 @@
 TEMPLATE = app
 #TARGET   = NewAwesomeApplication
 
-QT = core gui widgets
+QT = core gui widgets charts
 #win*:QT += winextras
 #CONFIG -= qt
 #CONFIG += console
