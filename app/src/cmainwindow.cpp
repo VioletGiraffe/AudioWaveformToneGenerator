@@ -84,10 +84,7 @@ void CMainWindow::setupChart()
 
 		const auto samples = _audio.currentSamplesBuffer();
 
-		const auto nChannels = samples.height();
-		std::vector<QLineSeries*> seriesForChannel;
-		seriesForChannel.reserve(nChannels);
-		for (size_t c = 0; c < nChannels; ++c)
+		for (size_t c = 0; c < samples.height(); ++c)
 		{
 			auto* series = new QLineSeries;
 			//seriesForChannel.emplace_back(series);

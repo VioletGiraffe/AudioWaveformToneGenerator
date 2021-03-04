@@ -37,7 +37,7 @@ struct AudioSamplesBuffer {
 		{
 			for (size_t c = 0; c < nChannels; ++c)
 			{
-				_buffer[c][i] = memory_cast<float>(reinterpret_cast<const char*>(dataPtr) + i * frameSize + c);
+				_buffer[c][i] = memory_cast<float>(reinterpret_cast<const char*>(dataPtr) + i * frameSize + c * sizeof(T));
 			}
 		}
 	}
