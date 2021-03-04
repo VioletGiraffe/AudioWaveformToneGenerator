@@ -320,7 +320,7 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 	}
 
 	const auto bytesPerSample = pMixFormat->wBitsPerSample / 8;
-	_currentSamplesBuffer.setData(pData, numBufferFrames * bytesPerSample, pMixFormat->nChannels);
+	_currentSamplesBuffer.setData(pData, numBufferFrames, pMixFormat->nChannels);
 
 	hr = pAudioRenderClient->ReleaseBuffer(numBufferFrames, 0);
 	assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );
@@ -346,7 +346,7 @@ void CAudioOutputWasapi::playbackThread(std::wstring deviceId)
 
 		const auto [f, chIndex] = _signal.params();
 		generateTone(pData, numAvailableFrames, pMixFormat->nChannels, pMixFormat->nSamplesPerSec, f, chIndex, _samplesPlayedSoFar);
-		_currentSamplesBuffer.setData(pData, numAvailableFrames * bytesPerSample, pMixFormat->nChannels);
+		_currentSamplesBuffer.setData(pData, numAvailableFrames, pMixFormat->nChannels);
 
 		hr = pAudioRenderClient->ReleaseBuffer(numAvailableFrames, 0);
 		assert_and_return_message_r(SUCCEEDED(hr), "IAudioClient.ReleaseBuffer error: " + ErrorStringFromHRESULT(hr), );

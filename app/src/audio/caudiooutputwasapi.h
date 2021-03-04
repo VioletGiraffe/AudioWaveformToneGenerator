@@ -26,16 +26,14 @@ struct AudioFormat {
 
 template <typename T>
 struct AudioSamplesBuffer {
-	void setData(const void* dataPtr, const size_t sizeBytes, const size_t nChannels) {
-		assert_and_return_r(sizeBytes % (sizeof(T) * nChannels) == 0, );
-		
+	void setData(const void* dataPtr, const size_t nFrames, const size_t nChannels)
+	{
 		std::lock_guard lock{ _mtx };
 
 		const auto frameSize = nChannels * sizeof(T);
-		const auto numFrames = sizeBytes / frameSize;
-		_buffer.resize(nChannels, numFrames);
+		_buffer.resize(nChannels, nFrames);
 
-		for (size_t i = 0; i < numFrames; ++i)
+		for (size_t i = 0; i < nFrames; ++i)
 		{
 			for (size_t c = 0; c < nChannels; ++c)
 			{
